@@ -13,6 +13,7 @@ Experiment with:
 """
 
 import os
+import json
 from google import genai
 
 # Central place to update the model name if needed.
@@ -125,3 +126,65 @@ Rules:
             return (response.text or "").strip()
         except Exception as e:
             return f"API error — could not generate answer. ({type(e).__name__}: {e})"
+
+    # -----------------------------------------------------------
+    # Task suggestions: propose a structured care task
+    # -----------------------------------------------------------
+
+    def suggest_task(self, query, snippets):
+        """
+        Ask the model to propose ONE care task as a JSON object.
+
+        snippets: list of (filename, text) tuples for grounding (may be empty)
+        Returns a parsed dict (title/description/date/time/priority/recurrence)
+        or None if the model output could not be parsed.
+        """
+        context_blocks = []
+        for filename, text in (snippets or []):
+            context_blocks.append(f"File: {filename}\n{text}")
+        context = "\n\n".join(context_blocks) if context_blocks else "(no existing records)"
+
+        prompt = f"""
+You are PawPal, a pet-care planning assistant. Propose exactly ONE concrete care
+task based on the owner's request and the existing records below.
+
+Existing records:
+{context}
+
+Owner request:
+{query}
+
+Respond with ONLY a JSON object (no markdown fences, no commentary) using these keys:
+- "title": short task name (string)
+- "description": one short sentence of detail (string)
+- "date": date in YYYY-MM-DD format (string)
+- "time": 24-hour time in HH:MM format (string)
+- "priority": integer from 0 (low) to 10 (high)
+- "recurrence": one of "none", "daily", "weekly"
+"""
+
+        try:
+            response = self.client.models.generate_content(
+                model=GEMINI_MODEL_NAME,
+                contents=prompt
+            )
+            return self._parse_json_object(response.text or "")
+        except Exception:
+            return None
+
+    @staticmethod
+    def _parse_json_object(text):
+        """Extract the first JSON object from a model response, tolerating fences."""
+        cleaned = (text or "").strip()
+        if cleaned.startswith("```"):
+            cleaned = cleaned.strip("`")
+            if cleaned[:4].lower() == "json":
+                cleaned = cleaned[4:]
+        start = cleaned.find("{")
+        end = cleaned.rfind("}")
+        if start == -1 or end == -1 or end < start:
+            return None
+        try:
+            return json.loads(cleaned[start:end + 1])
+        except json.JSONDecodeError:
+            return None

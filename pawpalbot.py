@@ -11,17 +11,19 @@ Core PawPalBot class responsible for:
 import os
 import glob
 import re
+from datetime import datetime
 
 from pawpal_context import build_pawpal_documents
 
 class PawPalBot:
-    def __init__(self, docs_folder="docs", llm_client=None, owners=None, scheduler=None):
+    def __init__(self, docs_folder="docs", llm_client=None, owners=None, scheduler=None, pets=None):
         """
         docs_folder: directory containing project documentation files (optional)
         llm_client: optional Gemini client for LLM based answers
         owners: optional list of PawPal Owner objects whose pets/tasks become
             searchable documents so the assistant can answer about real pet data
         scheduler: optional PawPal Scheduler holding the authoritative Task objects
+        pets: optional list of Pet objects not yet attached to an owner
         """
         self.docs_folder = docs_folder
         self.llm_client = llm_client
@@ -29,6 +31,7 @@ class PawPalBot:
         # Keep references to the live PawPal system so we can refresh later.
         self.owners = owners or []
         self.scheduler = scheduler
+        self.pets = pets or []
 
         # Guardrail thresholds for "meaningful evidence"
         self.min_evidence_score = 2
@@ -49,18 +52,20 @@ class PawPalBot:
         """
         # File-based docs plus live PawPal data, combined into one corpus.
         self.documents = self.load_documents() + build_pawpal_documents(
-            owners=self.owners, scheduler=self.scheduler
+            owners=self.owners, scheduler=self.scheduler, pets=self.pets
         )
         self.paragraphs = self.build_paragraph_store(self.documents)
         self.index = self.build_index(self.paragraphs)
         return self
 
-    def set_pawpal_data(self, owners=None, scheduler=None):
+    def set_pawpal_data(self, owners=None, scheduler=None, pets=None):
         """Point PawPalBot at (new) PawPal data and rebuild the index."""
         if owners is not None:
             self.owners = owners
         if scheduler is not None:
             self.scheduler = scheduler
+        if pets is not None:
+            self.pets = pets
         return self.reload()
 
     # -----------------------------------------------------------
@@ -254,6 +259,78 @@ class PawPalBot:
         snippets = [(filename, text) for _, filename, text in scored_snippets]
 
         return self.llm_client.answer_from_snippets(query, snippets)
+
+    # -----------------------------------------------------------
+    # Task suggestions (LLM-assisted quick-add)
+    # -----------------------------------------------------------
+
+    def suggest_task(self, query, top_k=5):
+        """
+        Ask the LLM to propose ONE concrete care task from the owner's request,
+        grounded in the current pets/schedule.
+
+        Returns a dict ready to prefill an "Add Task" form:
+            {title, description, date (date), time (time), priority (int),
+             recurrence ("none"|"daily"|"weekly")}
+        or None if no usable suggestion could be produced.
+        """
+        if self.llm_client is None:
+            raise RuntimeError(
+                "Task suggestions require an LLM client. Provide a GeminiClient instance."
+            )
+
+        # Any relevant existing records give the model helpful grounding, but a
+        # suggestion should still work when nothing matches.
+        snippets = self.retrieve(query, top_k=top_k)
+        raw = self.llm_client.suggest_task(query, snippets)
+        return self._normalize_suggestion(raw)
+
+    def _normalize_suggestion(self, raw):
+        """Convert the LLM's raw JSON dict into typed values for the UI form."""
+        if not isinstance(raw, dict):
+            return None
+
+        title = str(raw.get("title", "")).strip()
+        if not title:
+            return None
+
+        suggestion = {
+            "title": title,
+            "description": str(raw.get("description", "")).strip(),
+            "date": None,
+            "time": None,
+            "priority": 1,
+            "recurrence": "none",
+        }
+
+        # Priority -> clamped int
+        try:
+            suggestion["priority"] = max(0, min(10, int(raw.get("priority", 1))))
+        except (TypeError, ValueError):
+            pass
+
+        # Recurrence -> one of the allowed values
+        rec = str(raw.get("recurrence", "none")).lower().strip()
+        if rec in ("none", "daily", "weekly"):
+            suggestion["recurrence"] = rec
+
+        # Date "YYYY-MM-DD" -> date
+        raw_date = str(raw.get("date", "")).strip()
+        if raw_date:
+            try:
+                suggestion["date"] = datetime.strptime(raw_date, "%Y-%m-%d").date()
+            except ValueError:
+                pass
+
+        # Time "HH:MM" -> time
+        raw_time = str(raw.get("time", "")).strip()
+        if raw_time:
+            try:
+                suggestion["time"] = datetime.strptime(raw_time, "%H:%M").time()
+            except ValueError:
+                pass
+
+        return suggestion
 
     # -----------------------------------------------------------
     # Bonus Helper: concatenated docs for naive generation mode

@@ -1,6 +1,27 @@
 import streamlit as st
 from datetime import datetime
 from pawpal_system import Owner, Pet, Scheduler, Task
+from pawpalbot import PawPalBot
+
+
+@st.cache_resource
+def get_llm_client():
+    """
+    Build a GeminiClient once per session, or return None if LLM features are
+    unavailable (google-genai not installed, or GEMINI_API_KEY not set).
+    The assistant then falls back to retrieval-only Q&A.
+    """
+    try:
+        from dotenv import load_dotenv
+        load_dotenv()
+    except Exception:
+        pass
+    try:
+        from llm_client import GeminiClient
+        return GeminiClient()
+    except Exception:
+        return None
+
 
 st.set_page_config(page_title="PawPal+", page_icon="🐾", layout="centered")
 
@@ -130,6 +151,7 @@ if submitted:
             st.info("No owner to link to; pet will be created without owner.")
 
         st.session_state.pets.append(pet_obj)
+        st.session_state.pawpal_dirty = True  # assistant should re-index
         st.success(f"Added pet {pet_name_input}")
 
 st.write("Current pets:")
@@ -158,23 +180,36 @@ scheduler: Scheduler = st.session_state.scheduler
 # ── Add a Task ───────────────────────────────────────────────────────────────
 st.subheader("Add a Task")
 
+# Defaults come from an AI Pet Assistant suggestion when one is pending.
+sug = st.session_state.get("task_suggestion") or {}
+if sug:
+    st.info("✨ Prefilled from the AI Pet Assistant. Review the fields and click Add Task.")
+
+rec_options = ["none", "daily", "weekly"]
+default_rec_index = rec_options.index(sug["recurrence"]) if sug.get("recurrence") in rec_options else 0
+
 with st.form("add_task_form"):
-    task_title = st.text_input("Task title", value="Walk")
-    task_desc  = st.text_area("Description", value="")
+    task_title = st.text_input("Task title", value=sug.get("title", "Walk"))
+    task_desc  = st.text_area("Description", value=sug.get("description", ""))
 
     col_d, col_t = st.columns(2)
     with col_d:
-        task_date = st.date_input("Date", value=datetime.today().date())
+        task_date = st.date_input("Date", value=sug.get("date") or datetime.today().date())
     with col_t:
-        task_time = st.time_input("Time", value=datetime.now().replace(second=0, microsecond=0).time())
+        task_time = st.time_input(
+            "Time",
+            value=sug.get("time") or datetime.now().replace(second=0, microsecond=0).time(),
+        )
 
     col_p, col_r, col_rec = st.columns(3)
     with col_p:
-        task_priority = st.number_input("Priority (0 = low)", min_value=0, max_value=10, value=1, step=1)
+        task_priority = st.number_input(
+            "Priority (0 = low)", min_value=0, max_value=10, value=int(sug.get("priority", 1)), step=1
+        )
     with col_r:
         task_reminder = st.checkbox("Reminder")
     with col_rec:
-        task_recurrence = st.selectbox("Recurrence", ["none", "daily", "weekly"])
+        task_recurrence = st.selectbox("Recurrence", rec_options, index=default_rec_index)
 
     # Pet multi-select – use pets already in session state
     pet_options = st.session_state.pets
@@ -211,7 +246,91 @@ if task_submitted:
 
         st.success(f"Task '{new_task.title}' added for {scheduled_at.strftime('%Y-%m-%d %H:%M')}")
 
+        # Consume any AI suggestion and mark the assistant's index stale.
+        st.session_state.pop("task_suggestion", None)
+        st.session_state.pawpal_dirty = True
+
 st.divider()
+
+# ── AI Pet Assistant ─────────────────────────────────────────────────────────
+st.subheader("🤖 AI Pet Assistant")
+st.caption("Ask about your pets and schedule, or let PawPal draft a task for you.")
+
+llm_client = get_llm_client()
+if llm_client is None:
+    st.caption(
+        "LLM not configured (install `google-genai` and set `GEMINI_API_KEY`). "
+        "Q&A runs in retrieval-only mode; task suggestions are unavailable."
+    )
+
+# Gather live PawPal data from session state.
+if isinstance(st.session_state.get("owners"), list) and st.session_state["owners"]:
+    owners_in_state = st.session_state["owners"]
+elif st.session_state.get("owner_obj"):
+    owners_in_state = [st.session_state["owner_obj"]]
+else:
+    owners_in_state = []
+
+# Build the PawPalBot once, then keep it pointed at the current data and reload
+# its index only when pets/tasks have changed.
+if "pawpal_bot" not in st.session_state:
+    st.session_state.pawpal_bot = PawPalBot(
+        owners=owners_in_state,
+        scheduler=scheduler,
+        pets=st.session_state.pets,
+        llm_client=llm_client,
+    )
+    st.session_state.pawpal_dirty = False
+
+bot: PawPalBot = st.session_state.pawpal_bot
+bot.llm_client = llm_client
+bot.owners = owners_in_state
+bot.scheduler = scheduler
+bot.pets = st.session_state.pets
+if st.session_state.get("pawpal_dirty"):
+    bot.reload()
+    st.session_state.pawpal_dirty = False
+
+assistant_q = st.text_input(
+    "Ask PawPal",
+    key="assistant_q",
+    placeholder="e.g. What does Bella need today? or: schedule a vet visit for Max",
+)
+
+col_ask, col_suggest = st.columns(2)
+with col_ask:
+    ask_clicked = st.button("Ask", use_container_width=True)
+with col_suggest:
+    suggest_clicked = st.button("Suggest a task", use_container_width=True)
+
+if ask_clicked:
+    if not assistant_q.strip():
+        st.warning("Type a question first.")
+    else:
+        with st.spinner("Thinking..."):
+            if llm_client is not None:
+                answer = bot.answer_rag(assistant_q)
+            else:
+                answer = bot.answer_retrieval_only(assistant_q)
+        st.markdown(answer)
+
+if suggest_clicked:
+    if llm_client is None:
+        st.warning("Task suggestions need the LLM. Install `google-genai` and set `GEMINI_API_KEY`.")
+    elif not assistant_q.strip():
+        st.warning("Describe what you'd like to plan, then click Suggest a task.")
+    else:
+        with st.spinner("Drafting a task..."):
+            suggestion = bot.suggest_task(assistant_q)
+        if suggestion:
+            st.session_state.task_suggestion = suggestion
+            st.success(
+                f"Suggested '{suggestion['title']}'. Prefilled the Add Task form above — "
+                "review and click Add Task."
+            )
+            st.rerun()
+        else:
+            st.warning("Couldn't turn that into a task. Try rephrasing your request.")
 
 # ── Build / View Schedule ────────────────────────────────────────────────────
 st.subheader("Build Schedule")
@@ -294,3 +413,50 @@ if st.session_state.get("show_schedule"):
                     else:
                         st.session_state.complete_msg = f"'{t.title}' marked complete."
                     st.rerun()
+
+        # Edit tasks (e.g. reschedule to resolve a conflict)
+        st.markdown("**Edit tasks:**")
+        if conflicts:
+            st.caption("Tip: change a task's time or date to clear the conflicts above.")
+        for t in tasks:
+            pet_names = ", ".join(
+                pet_store[pid].name for pid in t.pet_ids if pid in pet_store
+            ) or "—"
+            with st.expander(f"✏️ {t.title} @ {t.scheduled_at.strftime('%H:%M')} ({pet_names})"):
+                with st.form(f"edit_task_{t.id}"):
+                    edit_title = st.text_input("Title", value=t.title, key=f"edit_title_{t.id}")
+                    ecol_d, ecol_t = st.columns(2)
+                    with ecol_d:
+                        edit_date = st.date_input("Date", value=t.scheduled_at.date(), key=f"edit_date_{t.id}")
+                    with ecol_t:
+                        edit_time = st.time_input("Time", value=t.scheduled_at.time(), key=f"edit_time_{t.id}")
+                    ecol_p, ecol_rec = st.columns(2)
+                    with ecol_p:
+                        edit_priority = st.number_input(
+                            "Priority (0 = low)", min_value=0, max_value=10,
+                            value=int(t.priority), step=1, key=f"edit_prio_{t.id}",
+                        )
+                    with ecol_rec:
+                        _rec_val = t.recurrence or "none"
+                        edit_recurrence = st.selectbox(
+                            "Recurrence", rec_options,
+                            index=rec_options.index(_rec_val) if _rec_val in rec_options else 0,
+                            key=f"edit_rec_{t.id}",
+                        )
+
+                    edit_submitted = st.form_submit_button("Save changes")
+
+                if edit_submitted:
+                    if not edit_title.strip():
+                        st.error("Title is required.")
+                    else:
+                        scheduler.edit_task(
+                            t.id,
+                            title=edit_title.strip(),
+                            scheduled_at=datetime.combine(edit_date, edit_time),
+                            priority=int(edit_priority),
+                            recurrence=edit_recurrence if edit_recurrence != "none" else None,
+                        )
+                        st.session_state.complete_msg = f"'{edit_title.strip()}' updated."
+                        st.session_state.pawpal_dirty = True  # keep assistant in sync
+                        st.rerun()

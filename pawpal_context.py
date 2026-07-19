@@ -76,6 +76,7 @@ def _task_document(task, pet_store: Dict[str, Pet]) -> Tuple[str, str]:
 def build_pawpal_documents(
     owners: Optional[List[Owner]] = None,
     scheduler: Optional[Scheduler] = None,
+    pets: Optional[List[Pet]] = None,
 ) -> List[Tuple[str, str]]:
     """
     Serialize the current PawPal state into a list of (filename, text) documents
@@ -83,11 +84,17 @@ def build_pawpal_documents(
 
     owners: list of Owner objects (their pets are read from owner.pets)
     scheduler: Scheduler holding the authoritative Task objects
+    pets: extra Pet objects to include (e.g. pets created in the UI that are not
+        yet linked to an owner); deduplicated against owners' pets by id
     """
     owners = owners or []
     documents: List[Tuple[str, str]] = []
 
     pet_store = build_pet_store(owners)
+
+    # Fold in any loose pets not attached to an owner (kept only if new).
+    for pet in pets or []:
+        pet_store.setdefault(pet.id, pet)
 
     # Map pet_id -> owner name so pet docs can mention who they belong to.
     pet_owner_name: Dict[str, str] = {}
