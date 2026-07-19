@@ -61,6 +61,43 @@ classDiagram
         +filter_tasks(tasks, completed, pet_name, pet_store) List
     }
 
+    class PawPalBot {
+        +String docs_folder
+        +GeminiClient llm_client
+        +List owners
+        +Scheduler scheduler
+        +List pets
+        +List documents
+        +List paragraphs
+        +Dict index
+        +int min_evidence_score
+        +float min_evidence_coverage
+        +reload() PawPalBot
+        +set_pawpal_data(owners, scheduler, pets) PawPalBot
+        +load_documents() List
+        +build_index(paragraphs) Dict
+        +retrieve(query, top_k) List
+        +retrieve_with_scores(query, top_k) List
+        +has_meaningful_evidence(query, scored) bool
+        +answer_retrieval_only(query, top_k) String
+        +answer_rag(query, top_k) String
+        +suggest_task(query, top_k) Dict
+        +full_corpus_text() String
+    }
+
+    class GeminiClient {
+        +Client client
+        +naive_answer_over_full_docs(query, all_text) String
+        +answer_from_snippets(query, snippets) String
+        +suggest_task(query, snippets) Dict
+    }
+
+    class pawpal_context {
+        <<module>>
+        +build_pawpal_documents(owners, scheduler, pets) List
+        +build_pet_store(owners) Dict
+    }
+
     %% Owner holds Pet objects in its pets dict
     Owner "1" *-- "*" Pet : owns
 
@@ -76,4 +113,19 @@ classDiagram
     %% Task stores owner_id and pet_ids (string references, not objects)
     Task "*" ..> "0..1" Owner : owner_id
     Task "*" ..> "*" Pet : pet_ids
+
+    %% RAG assistant layer over the live PawPal data
+    PawPalBot "1" o-- "0..1" GeminiClient : llm_client (optional)
+    PawPalBot ..> pawpal_context : builds documents
+    PawPalBot ..> Owner : reads live data
+    PawPalBot ..> Scheduler : reads live data
+    PawPalBot ..> Pet : reads live data
+
+    %% Bridge serializes PawPal objects into (filename, text) documents
+    pawpal_context ..> Owner : serializes
+    pawpal_context ..> Pet : serializes
+    pawpal_context ..> Scheduler : serializes
+
+    %% GeminiClient generates answers/suggestions from retrieved snippets
+    PawPalBot ..> GeminiClient : answer_from_snippets / suggest_task
 ```
