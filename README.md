@@ -178,6 +178,39 @@ PawPal: [pet_Bella.txt]
 
 ## Testing Summary
 
+### Automated tests (pytest)
+
+The `tests/` folder contains an automated suite covering every layer of the
+system. The tests are **fast, deterministic, and offline** — the LLM and the
+Gemini API are replaced with fakes, so no network access or API key is needed.
+
+| File | Covers |
+| --- | --- |
+| [tests/test_pawpal.py](tests/test_pawpal.py) | Domain layer — `Task`/`Pet`/`Scheduler`: completion, recurrence next-occurrence, sorting, and conflict detection. |
+| [tests/test_context.py](tests/test_context.py) | `pawpal_context` — serializing owners, pets (incl. "loose" pets), and tasks into `(filename, text)` documents. |
+| [tests/test_pawpalbot.py](tests/test_pawpalbot.py) | `PawPalBot` — tokenizing, index building, scoring/retrieval, the evidence guardrail, RAG wiring (via a fake LLM), and task-suggestion normalization. |
+| [tests/test_llm_client.py](tests/test_llm_client.py) | `GeminiClient` — prompt construction, refusal on empty snippets, API-error handling, and JSON parsing (`_parse_json_object`), using a stubbed `google.genai`. |
+
+**How to run**
+
+```bash
+# from the project root (activate your virtualenv first)
+pip install -r requirements.txt      # installs pytest
+python -m pytest                     # run the whole suite
+```
+
+Useful variations:
+
+```bash
+python -m pytest -v                  # verbose, one line per test
+python -m pytest tests/test_pawpalbot.py   # a single file
+python -m pytest -k "conflict"       # only tests matching a keyword
+```
+
+All tests should pass with no external services configured.
+
+### Manual testing
+
 **What I tested**
 - Scheduling engine via `python main.py`: create/sort/filter tasks, recurring
   task next-occurrence generation, and same-pet / cross-pet conflict detection.
