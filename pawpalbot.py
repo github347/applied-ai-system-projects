@@ -314,11 +314,15 @@ class PawPalBot:
         if rec in ("none", "daily", "weekly"):
             suggestion["recurrence"] = rec
 
-        # Date "YYYY-MM-DD" -> date
+        # Date "YYYY-MM-DD" -> date. Never accept a date in the past: the LLM
+        # sometimes anchors to its training cutoff (e.g. 2023-10-27), so clamp
+        # any past date forward to today.
         raw_date = str(raw.get("date", "")).strip()
         if raw_date:
             try:
-                suggestion["date"] = datetime.strptime(raw_date, "%Y-%m-%d").date()
+                parsed_date = datetime.strptime(raw_date, "%Y-%m-%d").date()
+                today = datetime.today().date()
+                suggestion["date"] = max(parsed_date, today)
             except ValueError:
                 pass
 
