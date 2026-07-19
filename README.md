@@ -248,3 +248,7 @@ fail safely.
 > 📄 The full graded **responsible-AI reflection** — how I collaborated with AI,
 > one helpful and one flawed AI suggestion, and the system's limitations — is in
 > [model_card.md](model_card.md), not here.
+
+## Preview
+
+![AI Pet Assistan and Build Schedule preview image](<assets/AI Pet Assistan and Build Schedule.png>)
