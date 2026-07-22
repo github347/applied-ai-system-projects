@@ -3,7 +3,7 @@
 The LLM is replaced with a FakeLLM so no network calls are made.
 """
 
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import pytest
 
@@ -179,10 +179,13 @@ def test_suggest_task_requires_llm_client():
 
 
 def test_suggest_task_normalizes_valid_suggestion():
+    # Use a future date so the past-date clamp in _normalize_suggestion leaves
+    # it untouched; a hardcoded date eventually falls behind today and fails.
+    future_date = (datetime.today().date() + timedelta(days=30)).isoformat()
     raw = {
         "title": "Vet Visit",
         "description": "Annual checkup",
-        "date": "2026-04-01",
+        "date": future_date,
         "time": "14:30",
         "priority": 5,
         "recurrence": "weekly",
@@ -194,7 +197,7 @@ def test_suggest_task_normalizes_valid_suggestion():
     assert suggestion["title"] == "Vet Visit"
     assert suggestion["priority"] == 5
     assert suggestion["recurrence"] == "weekly"
-    assert suggestion["date"].isoformat() == "2026-04-01"
+    assert suggestion["date"].isoformat() == future_date
     assert suggestion["time"].strftime("%H:%M") == "14:30"
 
 

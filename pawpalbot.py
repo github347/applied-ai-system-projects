@@ -33,9 +33,11 @@ class PawPalBot:
         self.scheduler = scheduler
         self.pets = pets or []
 
-        # Guardrail thresholds for "meaningful evidence"
-        self.min_evidence_score = 2
-        self.min_evidence_coverage = 0.4
+        # Guardrail thresholds for "meaningful evidence".
+        # PawPal's live docs are short and structured, so a single distinctive
+        # match (e.g. a pet or task name) is already strong evidence. We only
+        # refuse when NO meaningful query term appears in the best snippet.
+        self.min_evidence_matches = 1
 
         # Load documents (docs/ folder + live PawPal data) and build the index.
         self.reload()
@@ -207,16 +209,19 @@ class PawPalBot:
         if not scored_snippets:
             return False
 
-        top_score = scored_snippets[0][0]
-        query_terms = self._query_tokens(query)
+        query_terms = set(self._query_tokens(query))
         if not query_terms:
             return False
 
-        coverage = top_score / len(set(query_terms))
-        return (
-            top_score >= self.min_evidence_score
-            and coverage >= self.min_evidence_coverage
-        )
+        # Count how many *meaningful* query terms (stopwords stripped) actually
+        # appear in the best-scoring snippet. Filler words like "does"/"today"
+        # never show up in the structured docs, so scoring against the raw query
+        # unfairly punished short, natural questions.
+        top_snippet_text = scored_snippets[0][2]
+        top_snippet_tokens = set(self._tokenize(top_snippet_text))
+        matches = sum(1 for term in query_terms if term in top_snippet_tokens)
+
+        return matches >= self.min_evidence_matches
 
     # -----------------------------------------------------------
     # Answering Modes
