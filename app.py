@@ -449,3 +449,13 @@ if st.session_state.get("show_schedule"):
                         st.session_state.complete_msg = f"'{edit_title.strip()}' updated."
                         st.session_state.pawpal_dirty = True  # keep assistant in sync
                         st.rerun()
+
+                if st.button("🗑️ Delete task", key=f"delete_{t.id}"):
+                    scheduler.delete_task(t.id)
+                    # sync pets so they no longer reference the removed task
+                    for pid in t.pet_ids:
+                        if pid in pet_store:
+                            pet_store[pid].remove_task(t.id)
+                    st.session_state.complete_msg = f"'{t.title}' deleted."
+                    st.session_state.pawpal_dirty = True  # keep assistant in sync
+                    st.rerun()

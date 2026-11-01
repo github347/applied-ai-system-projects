@@ -100,7 +100,7 @@ the browser, stored in session state, fed into `PawPalBot`, and re-indexed
    ```
 
 **Typical flow in the app:** create an owner → add pets → add tasks →
-**Generate schedule** (see conflicts and edit/reschedule tasks) → use the
+**Generate schedule** (see conflicts, edit/reschedule, or delete tasks) → use the
 **AI Pet Assistant** to ask questions or suggest tasks.
 
 ---
@@ -186,7 +186,7 @@ Gemini API are replaced with fakes, so no network access or API key is needed.
 
 | File | Covers |
 | --- | --- |
-| [tests/test_pawpal.py](tests/test_pawpal.py) | Domain layer — `Task`/`Pet`/`Scheduler`: completion, recurrence next-occurrence, sorting, and conflict detection. |
+| [tests/test_pawpal.py](tests/test_pawpal.py) | Domain layer — `Task`/`Pet`/`Scheduler`: completion, recurrence next-occurrence, sorting, conflict detection, and task deletion (index cleanup, unknown-ID no-op, pet sync). |
 | [tests/test_context.py](tests/test_context.py) | `pawpal_context` — serializing owners, pets (incl. "loose" pets), and tasks into `(filename, text)` documents. |
 | [tests/test_pawpalbot.py](tests/test_pawpalbot.py) | `PawPalBot` — tokenizing, index building, scoring/retrieval, the evidence guardrail, RAG wiring (via a fake LLM), and task-suggestion normalization. |
 | [tests/test_llm_client.py](tests/test_llm_client.py) | `GeminiClient` — prompt construction, refusal on empty snippets, API-error handling, and JSON parsing (`_parse_json_object`), using a stubbed `google.genai`. |
@@ -222,6 +222,9 @@ All tests should pass with no external services configured.
   converted into typed `date`/`time`/`priority`/`recurrence` values for the form.
 - Conflict resolution: confirmed rescheduling a task via `Scheduler.edit_task`
   re-indexes it and clears a same-pet conflict.
+- Task deletion: the **Delete task** button under each task in the Edit tasks
+  section calls `Scheduler.delete_task` and removes the task ID from its pets.
+  Covered by automated tests in `test_pawpal.py`.
 
 **What worked:** the domain layer is solid and deterministic; the RAG pipeline
 returns grounded answers and refuses appropriately; graceful degradation without

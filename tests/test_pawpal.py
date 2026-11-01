@@ -106,3 +106,44 @@ def test_conflict_detection_same_pet_conflict():
     assert len(warnings) == 1
     assert "Same-pet conflict" in warnings[0]
     assert "Buddy" in warnings[0]
+
+
+def test_delete_task_removes_from_all_indexes():
+    """delete_task removes the task from the id, date, and pet indexes."""
+    sched = Scheduler()
+    pet = Pet(name="Rex")
+    dt = datetime(2026, 3, 15, 12, 0)
+    t = sched.create_task(title="Brush", scheduled_at=dt, pet_ids=[pet.id])
+    pet.add_task(t.id)
+
+    sched.delete_task(t.id)
+
+    assert t.id not in sched.tasks_by_id
+    assert sched.view_tasks_on(dt.date()) == []
+    assert pet.id not in sched.tasks_by_pet
+
+
+def test_delete_task_unknown_id_is_noop():
+    """delete_task does nothing when the task ID does not exist."""
+    sched = Scheduler()
+    t = sched.create_task(title="Feed", scheduled_at=datetime(2026, 3, 15, 8, 0))
+
+    sched.delete_task("does-not-exist")
+
+    assert sched.tasks_by_id == {t.id: t}
+
+
+def test_delete_task_pet_sync_removes_task_id_from_pet():
+    """Removing the task ID from each assigned pet (as the UI does) clears the pet's reference."""
+    sched = Scheduler()
+    pet = Pet(name="Milo")
+    pet_store = {pet.id: pet}
+    t = sched.create_task(title="Groom", scheduled_at=datetime(2026, 3, 15, 9, 0), pet_ids=[pet.id])
+    pet.add_task(t.id)
+
+    sched.delete_task(t.id)
+    for pid in t.pet_ids:
+        if pid in pet_store:
+            pet_store[pid].remove_task(t.id)
+
+    assert t.id not in pet.tasks
