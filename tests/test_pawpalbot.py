@@ -221,6 +221,32 @@ def test_suggest_task_handles_non_dict():
     assert bot.suggest_task("something") is None
 
 
+def test_suggest_task_selects_pet_named_in_request():
+    bot = make_bot(llm_client=FakeLLM(suggestion={"title": "Breakfast"}))
+    bella = next(iter(bot.owners[0].pets.values()))
+
+    suggestion = bot.suggest_task("breakfast for bella")
+
+    assert suggestion["pet_ids"] == [bella.id]
+
+
+def test_suggest_task_pet_ids_empty_when_no_pet_named():
+    bot = make_bot(llm_client=FakeLLM(suggestion={"title": "Brush teeth"}))
+
+    suggestion = bot.suggest_task("brush teeth tonight")
+
+    assert suggestion["pet_ids"] == []
+
+
+def test_suggest_task_ignores_pet_name_inside_longer_word():
+    # "Bellamy" must not match the pet "Bella"
+    bot = make_bot(llm_client=FakeLLM(suggestion={"title": "Walk"}))
+
+    suggestion = bot.suggest_task("walk Bellamy")
+
+    assert suggestion["pet_ids"] == []
+
+
 def test_suggest_task_tolerates_bad_date_and_time():
     raw = {"title": "Walk", "date": "not-a-date", "time": "99:99"}
     bot = make_bot(llm_client=FakeLLM(suggestion=raw))

@@ -117,18 +117,8 @@ class PawPalBot:
 
     def build_index(self, paragraphs):
         """
-        TODO (Phase 1):
         Build a tiny inverted index mapping lowercase words to the documents
         they appear in.
-
-        Example structure:
-        {
-            "token": ["AUTH.md", "API_REFERENCE.md"],
-            "database": ["DATABASE.md"]
-        }
-
-        Keep this simple: split on whitespace, lowercase tokens,
-        ignore punctuation if needed.
         """
         index = {}
         for paragraph_id, (_, paragraph_text) in enumerate(paragraphs):
@@ -150,13 +140,7 @@ class PawPalBot:
 
     def score_document(self, query, text):
         """
-        TODO (Phase 1):
         Return a simple relevance score for how well the text matches the query.
-
-        Suggested baseline:
-        - Convert query into lowercase words
-        - Count how many appear in the text
-        - Return the count as the score
         """
         query_tokens = set(self._tokenize(query))
         text_tokens = set(self._tokenize(text))
@@ -166,7 +150,6 @@ class PawPalBot:
 
     def retrieve(self, query, top_k=3):
         """
-        TODO (Phase 1):
         Use the index and scoring function to select top_k relevant document snippets.
 
         Return a list of (filename, text) sorted by score descending.
@@ -276,8 +259,9 @@ class PawPalBot:
 
         Returns a dict ready to prefill an "Add Task" form:
             {title, description, date (date), time (time), priority (int),
-             recurrence ("none"|"daily"|"weekly")}
-        or None if no usable suggestion could be produced.
+             recurrence ("none"|"daily"|"weekly"), pet_ids (list of str)}
+        pet_ids lists every known pet named in the request (e.g. "Mochi").
+        Returns None if no usable suggestion could be produced.
         """
         if self.llm_client is None:
             raise RuntimeError(
@@ -288,7 +272,27 @@ class PawPalBot:
         # suggestion should still work when nothing matches.
         snippets = self.retrieve(query, top_k=top_k)
         raw = self.llm_client.suggest_task(query, snippets)
-        return self._normalize_suggestion(raw)
+        suggestion = self._normalize_suggestion(raw)
+        if suggestion is not None:
+            suggestion["pet_ids"] = [pet.id for pet in self._pets_named_in(query)]
+        return suggestion
+
+    def _pets_named_in(self, query):
+        """
+        Return the known pets whose name appears as a whole word in the query.
+        Matching is done locally, not by the LLM, so the pet is chosen reliably.
+        """
+        known = {pet.id: pet for pet in self.pets}
+        for owner in self.owners:
+            for pet in owner.pets.values():
+                known.setdefault(pet.id, pet)
+
+        matches = []
+        for pet in known.values():
+            name = (pet.name or "").strip()
+            if name and re.search(rf"\b{re.escape(name)}\b", query, re.IGNORECASE):
+                matches.append(pet)
+        return matches
 
     def _normalize_suggestion(self, raw):
         """Convert the LLM's raw JSON dict into typed values for the UI form."""

@@ -197,11 +197,14 @@ with st.form("add_task_form"):
     with col_rec:
         task_recurrence = st.selectbox("Recurrence", rec_options, index=default_rec_index)
 
-    # Pet multi-select – use pets already in session state
+    # Pet multi-select – use pets already in session state, prefilled with any
+    # pet the assistant found named in the request (e.g. "breakfast for Mochi")
     pet_options = st.session_state.pets
+    suggested_pet_ids = sug.get("pet_ids", [])
     selected_pets = st.multiselect(
         "Assign to pets",
         options=pet_options,
+        default=[p for p in pet_options if p.id in suggested_pet_ids],
         format_func=lambda p: getattr(p, "name", "?"),
     )
 
