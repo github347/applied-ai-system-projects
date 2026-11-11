@@ -23,9 +23,10 @@ def get_llm_client():
         return None
 
 
-st.set_page_config(page_title="PawPal+", page_icon="🐾", layout="centered")
+st.set_page_config(page_title="PawPal+", page_icon="🐾", layout="wide")
 
 st.title("🐾 PawPal+")
+st.caption("Plan your pets' care, one task at a time.")
 
 st.markdown(
     """
@@ -47,10 +48,8 @@ with st.expander("How it works", expanded=False):
 
 st.divider()
 
-st.subheader("Add a owner")
+st.subheader("👤 Add an owner")
 owner_name = st.text_input("Owner name", value="Jordan")
-# pet_name = st.text_input("Pet name", value="Mochi")
-# species = st.selectbox("Species", ["dog", "cat", "other"])
 
 # Owner creation UI
 col_owner1, col_owner2 = st.columns([2, 1])
@@ -60,7 +59,7 @@ if "owner_obj" not in st.session_state:
     st.session_state.owner_obj = None
 
 with col_owner1:
-    if st.button("Create owner"):
+    if st.button("Create owner", type="primary", width="stretch"):
         try:
             st.session_state.owner_obj = Owner(name=owner_name)
             st.success(f"Created owner {owner_name}")
@@ -76,7 +75,7 @@ with col_owner2:
     st.write("Current owner:")
     owner_obj = st.session_state.get("owner_obj")
     if owner_obj:
-        st.write(getattr(owner_obj, "name", "Unknown"))
+        st.markdown(f"**{getattr(owner_obj, 'name', 'Unknown')}**")
     else:
         st.info("No owner yet. Create one above.")
 
@@ -84,7 +83,7 @@ with col_owner2:
 if "pets" not in st.session_state:
     st.session_state.pets = []
 
-st.markdown("### Add a pet")
+st.subheader("🐶 Add a pet")
 with st.form("add_pet_form"):
     pet_name_input = st.text_input("Pet name", value="Mochi")
     pet_birthday = st.date_input("Birthday")
@@ -104,7 +103,7 @@ with st.form("add_pet_form"):
         format_func=lambda o: "No owner" if o is None else getattr(o, "name", "Unknown"),
     )
 
-    submitted = st.form_submit_button("Add pet")
+    submitted = st.form_submit_button("Add pet", type="primary")
 
 if submitted:
     try:
@@ -140,7 +139,7 @@ if submitted:
         st.session_state.pawpal_dirty = True  # assistant should re-index
         st.success(f"Added pet {pet_name_input}")
 
-st.write("Current pets:")
+st.markdown("**Current pets**")
 if st.session_state.pets:
     pets_display = []
     for p in st.session_state.pets:
@@ -151,7 +150,7 @@ if st.session_state.pets:
         if owner_obj:
             owner_attr = owner_obj if isinstance(owner_obj, str) else getattr(owner_obj, "name", None)
         pets_display.append({"name": name, "species": species_attr, "owner": owner_attr})
-    st.table(pets_display)
+    st.dataframe(pets_display, hide_index=True, width="stretch")
 else:
     st.info("No pets yet. Add one above.")
 
@@ -164,7 +163,7 @@ if "scheduler" not in st.session_state:
 scheduler: Scheduler = st.session_state.scheduler
 
 # ── Add a Task ───────────────────────────────────────────────────────────────
-st.subheader("Add a Task")
+st.subheader("📝 Add a Task")
 
 # Defaults come from an AI Pet Assistant suggestion when one is pending.
 sug = st.session_state.get("task_suggestion") or {}
@@ -208,7 +207,7 @@ with st.form("add_task_form"):
         format_func=lambda p: getattr(p, "name", "?"),
     )
 
-    task_submitted = st.form_submit_button("Add Task")
+    task_submitted = st.form_submit_button("Add Task", type="primary")
 
 if task_submitted:
     if not task_title.strip():
@@ -247,9 +246,10 @@ st.caption("Ask about your pets and schedule, or let PawPal draft a task for you
 
 llm_client = get_llm_client()
 if llm_client is None:
-    st.caption(
+    st.info(
         "LLM not configured (install `google-genai` and set `GEMINI_API_KEY`). "
-        "Q&A runs in retrieval-only mode; task suggestions are unavailable."
+        "Q&A runs in retrieval-only mode; task suggestions are unavailable.",
+        icon="ℹ️",
     )
 
 # Gather live PawPal data from session state.
@@ -288,9 +288,9 @@ assistant_q = st.text_input(
 
 col_ask, col_suggest = st.columns(2)
 with col_ask:
-    ask_clicked = st.button("Ask", use_container_width=True)
+    ask_clicked = st.button("Ask", type="primary", width="stretch")
 with col_suggest:
-    suggest_clicked = st.button("Suggest a task", use_container_width=True)
+    suggest_clicked = st.button("Suggest a task", width="stretch")
 
 if ask_clicked:
     if not assistant_q.strip():
@@ -301,7 +301,9 @@ if ask_clicked:
                 answer = bot.answer_rag(assistant_q)
             else:
                 answer = bot.answer_retrieval_only(assistant_q)
-        st.markdown(answer)
+        with st.container(border=True):
+            st.markdown("**Answer**")
+            st.markdown(answer)
 
 if suggest_clicked:
     if llm_client is None:
@@ -322,7 +324,7 @@ if suggest_clicked:
             st.warning("Couldn't turn that into a task. Try rephrasing your request.")
 
 # ── Build / View Schedule ────────────────────────────────────────────────────
-st.subheader("Build Schedule")
+st.subheader("📅 Build Schedule")
 
 col_view1, col_view2, col_view3 = st.columns(3)
 with col_view1:
@@ -333,7 +335,7 @@ with col_view3:
     filter_pet_names = [getattr(p, "name", "?") for p in st.session_state.pets]
     filter_pet = st.selectbox("Filter by pet", ["all"] + filter_pet_names, key="filter_pet")
 
-if st.button("Generate schedule"):
+if st.button("Generate schedule", type="primary"):
     st.session_state.show_schedule = True
 
 if st.session_state.get("show_schedule"):
@@ -382,13 +384,13 @@ if st.session_state.get("show_schedule"):
                 "Done":        "✓" if t.completed else "",
                 "Description": t.description or "—",
             })
-        st.table(rows)
+        st.dataframe(rows, hide_index=True, width="stretch")
 
         # Mark complete buttons (one per task)
         st.markdown("**Mark tasks complete:**")
         for t in tasks:
             if not t.completed:
-                if st.button(f"✅ {t.title} @ {t.scheduled_at.strftime('%H:%M')}", key=f"complete_{t.id}"):
+                if st.button(f"✅ {t.title} @ {t.scheduled_at.strftime('%H:%M')}", key=f"complete_{t.id}", help="Mark this task as done"):
                     next_task = t.mark_complete()
                     if next_task:
                         scheduler.add_task(next_task)
@@ -433,7 +435,7 @@ if st.session_state.get("show_schedule"):
                             key=f"edit_rec_{t.id}",
                         )
 
-                    edit_submitted = st.form_submit_button("Save changes")
+                    edit_submitted = st.form_submit_button("Save changes", type="primary")
 
                 if edit_submitted:
                     if not edit_title.strip():
@@ -450,7 +452,7 @@ if st.session_state.get("show_schedule"):
                         st.session_state.pawpal_dirty = True  # keep assistant in sync
                         st.rerun()
 
-                if st.button("🗑️ Delete task", key=f"delete_{t.id}"):
+                if st.button("🗑️ Delete task", key=f"delete_{t.id}", help="Permanently remove this task"):
                     scheduler.delete_task(t.id)
                     # sync pets so they no longer reference the removed task
                     for pid in t.pet_ids:
