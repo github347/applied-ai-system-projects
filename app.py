@@ -1,5 +1,5 @@
 import streamlit as st
-from datetime import datetime
+from datetime import datetime, timedelta
 from pawpal_system import Owner, Pet, Scheduler, Task
 from pawpalbot import PawPalBot
 
@@ -322,6 +322,36 @@ if suggest_clicked:
             st.rerun()
         else:
             st.warning("Couldn't turn that into a task. Try rephrasing your request.")
+
+# ── Week at a glance ─────────────────────────────────────────────────────────
+st.subheader("📆 Week at a glance")
+week_anchor = st.date_input("Week of", value=datetime.today().date(), key="week_anchor")
+week_start = week_anchor - timedelta(days=week_anchor.weekday())  # Monday
+today = datetime.today().date()
+week_pet_store = {p.id: p for p in st.session_state.pets}
+
+week_cols = st.columns(7)
+for i, col in enumerate(week_cols):
+    day = week_start + timedelta(days=i)
+    day_tasks = scheduler.sort_by_time(scheduler.view_tasks_on(day))
+    with col:
+        heading = f"{day:%a} {day:%d}"
+        if day == today:
+            st.markdown(f"**:blue[{heading} · Today]**")
+        else:
+            st.markdown(f"**{heading}**")
+        if not day_tasks:
+            st.caption("No tasks")
+        for t in day_tasks:
+            pets = ", ".join(
+                week_pet_store[pid].name for pid in t.pet_ids if pid in week_pet_store
+            ) or "—"
+            done = "✅" if t.completed else "⬜"
+            with st.container(border=True):
+                st.markdown(f"{done} **{t.scheduled_at:%H:%M}** {t.title}")
+                st.caption(pets)
+
+st.divider()
 
 # ── Build / View Schedule ────────────────────────────────────────────────────
 st.subheader("📅 Build Schedule")

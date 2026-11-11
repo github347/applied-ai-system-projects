@@ -37,6 +37,7 @@ The full class diagram lives in [diagrams/uml_final.md](diagrams/uml_final.md).
 At a high level the system has two layers:
 
 **1. Domain layer (`pawpal_system.py`)** — the pure scheduling engine:
+
 - `Owner` holds `Pet` objects; `Pet` stores its own info plus task IDs.
 - `Task` is a single care item (title, `scheduled_at`, priority, recurrence…).
 - `Scheduler` is the authoritative store of `Task` objects, indexed by id, date,
@@ -44,6 +45,7 @@ At a high level the system has two layers:
   sorting, and **conflict detection** (same-pet and cross-pet).
 
 **2. AI layer (RAG assistant)** — turns live data into answers:
+
 - `pawpal_context.py` is a **bridge** that serializes the live `Owner`/`Pet`/
   `Task` objects into plain-text `(filename, text)` "documents."
 - `PawPalBot` (`pawpalbot.py`) indexes those documents (a tiny inverted index +
@@ -54,8 +56,7 @@ At a high level the system has two layers:
   task suggestion (`suggest_task`).
 
 **Data flow (RAG):**
-`user question → PawPalBot.retrieve() finds snippets from live pet data →
-GeminiClient answers using ONLY those snippets → answer shown in the app`
+`user question → PawPalBot.retrieve() finds snippets from live pet data → GeminiClient answers using ONLY those snippets → answer shown in the app`
 
 The Streamlit UI (`app.py`) wires it together: owners/pets/tasks are created in
 the browser, stored in session state, fed into `PawPalBot`, and re-indexed
@@ -65,43 +66,47 @@ the browser, stored in session state, fed into `PawPalBot`, and re-indexed
 
 ## Setup Instructions
 
-**Prerequisites:** Python 3.10+.
+**Prerequisites:** Python 3.10+. The UI needs **Streamlit 1.50+**; `requirements.txt`
+pins this, so a normal `pip install -r requirements.txt` is enough.
 
 1. **Clone / open the project** and enter its folder.
-
 2. **(Recommended) create a virtual environment**
+
    ```bash
    python3 -m venv .venv
    source .venv/bin/activate        # Windows: .venv\Scripts\activate
    ```
-
 3. **Install dependencies**
+
    ```bash
    pip install -r requirements.txt
    ```
-
 4. **Add your Gemini API key** — create a `.env` file in the project root:
+
    ```ini
    GEMINI_API_KEY=your_key_here
    ```
+
    Get a key from Google AI Studio. Without a key the app still runs, but the AI
    Assistant falls back to **retrieval-only** answers and task suggestions are
    disabled.
-
 5. **Run the app**
+
    ```bash
    streamlit run app.py
    ```
-   Then open the URL Streamlit prints (usually http://localhost:8501).
 
+   Then open the URL Streamlit prints (usually http://localhost:8501).
 6. **(Optional) run the CLI demo** of the scheduling engine only:
+
    ```bash
    python main.py
    ```
 
 **Typical flow in the app:** create an owner → add pets → add tasks →
-**Generate schedule** (see conflicts, edit/reschedule, or delete tasks) → use the
-**AI Pet Assistant** to ask questions or suggest tasks.
+check the **Week at a glance** view for the week's workload → **Generate schedule**
+(see conflicts, edit/reschedule, or delete tasks) → use the **AI Pet Assistant** to
+ask questions or suggest tasks.
 
 ---
 
@@ -112,12 +117,14 @@ the browser, stored in session state, fed into `PawPalBot`, and re-indexed
 > "Annual vaccination").
 
 **Example 1 — Q&A about a pet (RAG)**
+
 ```text
 You:    What allergies does Bella have?
 PawPal: Bella is allergic to chicken. (Based on her pet profile record.)
 ```
 
 **Example 2 — Q&A about the schedule (RAG)**
+
 ```text
 You:    When is the vet checkup and what is it for?
 PawPal: The Vet Checkup is scheduled for 14:00 and is for an annual
@@ -125,12 +132,14 @@ PawPal: The Vet Checkup is scheduled for 14:00 and is for an annual
 ```
 
 **Example 3 — Refusal when there's no evidence (guardrail)**
+
 ```text
 You:    What medication does Bella take?
 PawPal: I do not know based on the docs I have.
 ```
 
 **Example 4 — Task suggestion that prefills the form**
+
 ```text
 You:    schedule a vet visit for Max next week
 PawPal: Suggested 'Vet Visit'. Prefilled the Add Task form above — review and
@@ -139,6 +148,7 @@ PawPal: Suggested 'Vet Visit'. Prefilled the Add Task form above — review and
 ```
 
 **Example 5 — Retrieval-only mode (no API key)**
+
 ```text
 You:    What allergies does Bella have?
 PawPal: [pet_Bella.txt]
@@ -176,6 +186,18 @@ PawPal: [pet_Bella.txt]
 
 ---
 
+## Recent UI Changes
+
+- **Week at a glance.** A read-only, seven-column view of the Monday–Sunday week
+  containing the chosen date. Each task shows its status, time, title, and pets,
+  and today is highlighted. It ignores the Build Schedule filters, and conflicts
+  are still reported in Build Schedule.
+- **Clearer actions.** Primary actions (Create owner, Add pet, Add Task, Ask,
+  Generate schedule, Save changes) are highlighted. Mark complete and Delete task
+  have tooltips. The assistant's answer appears in a bordered box.
+
+---
+
 ## Testing Summary
 
 ### Automated tests (pytest)
@@ -184,12 +206,12 @@ The `tests/` folder contains an automated suite covering every layer of the
 system. The tests are **fast, deterministic, and offline** — the LLM and the
 Gemini API are replaced with fakes, so no network access or API key is needed.
 
-| File | Covers |
-| --- | --- |
-| [tests/test_pawpal.py](tests/test_pawpal.py) | Domain layer — `Task`/`Pet`/`Scheduler`: completion, recurrence next-occurrence, sorting, conflict detection, and task deletion (index cleanup, unknown-ID no-op, pet sync). |
-| [tests/test_context.py](tests/test_context.py) | `pawpal_context` — serializing owners, pets (incl. "loose" pets), and tasks into `(filename, text)` documents. |
-| [tests/test_pawpalbot.py](tests/test_pawpalbot.py) | `PawPalBot` — tokenizing, index building, scoring/retrieval, the evidence guardrail, RAG wiring (via a fake LLM), and task-suggestion normalization. |
-| [tests/test_llm_client.py](tests/test_llm_client.py) | `GeminiClient` — prompt construction, refusal on empty snippets, API-error handling, and JSON parsing (`_parse_json_object`), using a stubbed `google.genai`. |
+| File                                                | Covers                                                                                                                                                                              |
+| --------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [tests/test_pawpal.py](tests/test_pawpal.py)         | Domain layer — `Task`/`Pet`/`Scheduler`: completion, recurrence next-occurrence, sorting, conflict detection, and task deletion (index cleanup, unknown-ID no-op, pet sync). |
+| [tests/test_context.py](tests/test_context.py)       | `pawpal_context` — serializing owners, pets (incl. "loose" pets), and tasks into `(filename, text)` documents.                                                                 |
+| [tests/test_pawpalbot.py](tests/test_pawpalbot.py)   | `PawPalBot` — tokenizing, index building, scoring/retrieval, the evidence guardrail, RAG wiring (via a fake LLM), and task-suggestion normalization.                             |
+| [tests/test_llm_client.py](tests/test_llm_client.py) | `GeminiClient` — prompt construction, refusal on empty snippets, API-error handling, and JSON parsing (`_parse_json_object`), using a stubbed `google.genai`.                |
 
 **How to run**
 
@@ -212,6 +234,7 @@ All tests should pass with no external services configured.
 ### Manual testing
 
 **What I tested**
+
 - Scheduling engine via `python main.py`: create/sort/filter tasks, recurring
   task next-occurrence generation, and same-pet / cross-pet conflict detection.
 - `PawPalBot` document building: verified owners, pets (including "loose" pets
@@ -225,6 +248,11 @@ All tests should pass with no external services configured.
 - Task deletion: the **Delete task** button under each task in the Edit tasks
   section calls `Scheduler.delete_task` and removes the task ID from its pets.
   Covered by automated tests in `test_pawpal.py`.
+- UI smoke test with Streamlit's `AppTest`: the page loads without exceptions,
+  and a flow of creating an owner, adding a pet and a task, and generating the
+  schedule renders the schedule tables and task buttons. The Week at a glance view
+  shows tasks on the correct days with today highlighted. Checked with Streamlit
+  1.50.0. I have not checked layout or spacing in a browser.
 
 **What worked:** the domain layer is solid and deterministic; the RAG pipeline
 returns grounded answers and refuses appropriately; graceful degradation without
