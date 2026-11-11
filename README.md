@@ -282,4 +282,18 @@ fail safely.
 
 ## Preview
 
-![AI Pet Assistan and Build Schedule preview image](<assets/AI Pet Assistan and Build Schedule.png>)
+### Build Schedule
+
+![Build Schedule preview](assets/Build%20Schedule%20preview.png)
+
+### Week at a glance
+
+![Week at a glance](assets/Week%20at%20a%20glance.png)
+
+### Edit task
+
+![Edit task preview](assets/Edit%20task%20preview.png)
+
+### Prefill task from AI Assistant
+
+![Prefill task from AI Assistant](assets/Prefill%20task%20from%20AI%20Assistant.png)
