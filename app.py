@@ -88,6 +88,10 @@ with st.form("add_pet_form"):
     pet_name_input = st.text_input("Pet name", value="Mochi")
     pet_birthday = st.date_input("Birthday")
     pet_species = st.selectbox("Species", ["dog", "cat", "other"])
+    pet_allergies_input = st.text_input(
+        "Allergies (comma-separated, optional)",
+        placeholder="e.g. chicken, pollen",
+    )
     # Owner selection inside the form (uses owner_obj or owners list if present)
     owners_for_select = []
     if "owners" in st.session_state and isinstance(st.session_state["owners"], list):
@@ -108,12 +112,10 @@ with st.form("add_pet_form"):
 if submitted:
     try:
         pet_obj = Pet(name=pet_name_input, birthday=pet_birthday, species=pet_species)
-    except TypeError:
-        try:
-            pet_obj = Pet(pet_name_input, pet_birthday, pet_species)
-        except Exception as e:
-            st.error(f"Failed to create Pet: {e}")
-            pet_obj = None
+        pet_obj.edit_allergies(pet_allergies_input.split(","))
+    except Exception as e:
+        st.error(f"Failed to create Pet: {e}")
+        pet_obj = None
 
     if pet_obj:
         # Use owner chosen in the form first, else fall back to session owner_obj

@@ -147,3 +147,12 @@ def test_delete_task_pet_sync_removes_task_id_from_pet():
             pet_store[pid].remove_task(t.id)
 
     assert t.id not in pet.tasks
+
+
+def test_edit_allergies_normalizes_input():
+    pet = Pet(name="Bella", species="dog")
+    assert pet.allergies == []
+    pet.edit_allergies([" chicken ", "Pollen", "chicken", "", "CHICKEN"])
+    assert pet.allergies == ["chicken", "Pollen"]
+    pet.edit_allergies(["  "])
+    assert pet.allergies == []

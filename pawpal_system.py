@@ -78,6 +78,7 @@ class Pet:
         edit_name(new_name: str): Updates the pet's name.
         edit_sex(new_sex: str): Updates the pet's sex.
         edit_birthday(new_birthday: date): Updates the pet's birthday.
+        edit_allergies(new_allergies: List[str]): Replaces the pet's allergy list (trimmed, de-duplicated).
         add_task(task_id: str): Adds a task ID to the pet's task list if not already present.
         remove_task(task_id: str): Removes a task ID from the pet's task list if present.
     """
@@ -100,6 +101,15 @@ class Pet:
 
     def edit_birthday(self, new_birthday: date) -> None:
         self.birthday = new_birthday
+
+    def edit_allergies(self, new_allergies: List[str]) -> None:
+        # Normalize: trim whitespace, drop empties and case-insensitive duplicates.
+        cleaned: List[str] = []
+        for item in new_allergies:
+            value = item.strip()
+            if value and value.lower() not in (c.lower() for c in cleaned):
+                cleaned.append(value)
+        self.allergies = cleaned
 
     def add_task(self, task_id: str) -> None:
         if task_id not in self.tasks:
